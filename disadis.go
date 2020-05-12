@@ -17,62 +17,12 @@ import (
 	"github.com/ndlib/disadis/fedora"
 )
 
-// A reopener is a log file which knows how to re-open itself.
-type reopener interface {
-	Reopen()
-}
-
-type loginfo struct {
-	name string
-	f    *os.File
-}
-
-func newReopener(filename string) *loginfo {
-	return &loginfo{name: filename}
-}
-
-func (li *loginfo) Reopen() {
-	if li.name == "" {
-		return
-	}
-	if li.f != nil {
-		log.Println("Reopening Log files")
-	}
-	newf, err := os.OpenFile(li.name, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0666)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.SetOutput(newf)
-	if li.f != nil {
-		li.f.Close()
-	}
-	li.f = newf
-}
-
-// writePID writes the PID of this process to the file fname.
-func writePID(fname string) {
-	f, err := os.Create(fname)
-	if err != nil {
-		log.Printf("Error writing PID to file '%s': %s\n", fname, err.Error())
-		return
-	}
-	pid := os.Getpid()
-	fmt.Fprintf(f, "%d", pid)
-	f.Close()
-}
-
-func signalHandler(sig <-chan os.Signal, logw reopener) {
+func signalHandler(sig <-chan os.Signal) {
 	for s := range sig {
 		log.Println("---Received signal", s)
 		switch s {
-		case syscall.SIGUSR1:
-			logw.Reopen()
 		case syscall.SIGINT, syscall.SIGTERM:
 			log.Println("Exiting")
-			if pidfilename != "" {
-				// we don't care if there is an error
-				os.Remove(pidfilename)
-			}
 			os.Exit(1)
 		}
 
@@ -82,9 +32,8 @@ func signalHandler(sig <-chan os.Signal, logw reopener) {
 // the structure of our configuration file.
 type config struct {
 	General struct {
-		Log_filename string
-		Fedora_addr  string
-		Bendo_token  string
+		Fedora_addr string
+		Bendo_token string
 	}
 	Handler map[string]*struct {
 		Port          string
@@ -94,26 +43,18 @@ type config struct {
 	}
 }
 
-var (
-	pidfilename string
-)
-
 func main() {
 	var (
-		logfilename string
-		logw        reopener
 		fedoraAddr  string
 		configFile  string
 		config      config
 		showVersion bool
 	)
 
-	flag.StringVar(&logfilename, "log", "", "name of log file. Defaults to stdout")
 	flag.StringVar(&fedoraAddr, "fedora", "",
 		"url to use for fedora, includes username and password, if needed")
 	flag.StringVar(&configFile, "config", "",
 		"name of config file to use")
-	flag.StringVar(&pidfilename, "pid", "", "file to store pid of server")
 	flag.BoolVar(&showVersion, "version", false, "Display the version and exit")
 
 	flag.Parse()
@@ -130,20 +71,17 @@ func main() {
 		if err != nil {
 			log.Println(err)
 		}
-		logfilename = config.General.Log_filename
 		fedoraAddr = config.General.Fedora_addr
 	}
 
 	/* first set up the log file */
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
-	logw = newReopener(logfilename)
-	logw.Reopen()
 	log.Println("-----Starting Disadis Server", Version)
 
 	/* set up signal handlers */
 	sig := make(chan os.Signal, 5)
-	signal.Notify(sig, syscall.SIGHUP, syscall.SIGUSR1, syscall.SIGUSR2)
-	go signalHandler(sig, logw)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	go signalHandler(sig)
 
 	/* Now set up the handler chains */
 	if fedoraAddr == "" {
@@ -159,15 +97,7 @@ func main() {
 		return
 	}
 
-	if pidfilename != "" {
-		writePID(pidfilename)
-	}
-
 	runHandlers(config, fedora)
-
-	if pidfilename != "" {
-		os.Remove(pidfilename)
-	}
 }
 
 // runHandlers starts a listener for each port in its own goroutine

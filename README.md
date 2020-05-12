@@ -40,12 +40,11 @@ exists.
 
 The daemon takes a command line argument which names a configuration file.
 The file gives how to determine the current user from a request, the handlers to
-set up, and the URL to use to address fedora.
+set up, and the URL to use to address fedora. All logging is sent to `STDOUT`.
 
 The configuration file consists of a number of sections, which may appear in any order.
-The first section `[general]` has three variables to set:
+The first section `[general]` has two variables to set:
 
- * `log-filename` is the name of the log file to use. If none is provided, logging is sent to `stdout`.
  * `fedora-addr` is the root URL to use to access your fedora instance.
  It should include the fedora username and password if those are needed to download content from your fedora.
 * `bendo-token` is a token to use for content stored at external URLs via E or R datastreams. (optional)
@@ -54,9 +53,8 @@ Sample section:
 
     [general]
     fedora-addr = http://fedoraAdmin:fedoraAdmin@localhost:8983/fedora
-    log-filename = /var/log/disadis/log.txt
 
-The other sections each specisify a handler.
+The other sections each specify a handler.
 There will be as many additional sections as you need for each handler.
 The section name is `[Handler "name"]` where `name` is the name you want to use for this handler.
 Inside the section there are a few variables to set for that handler.
